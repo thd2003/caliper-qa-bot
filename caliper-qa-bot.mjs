@@ -212,17 +212,21 @@ client.on('warn', (w) => console.warn('Discord warning:', w));
 client.on('shardDisconnect', (e, id) => console.warn(`Shard ${id} disconnected: ${e?.code}`));
 client.on('shardError', (err) => console.error('Shard error:', err.message));
 
-// Raw gateway tap. Every check so far -- intents, permissions, channel id,
-// listener order -- has come back correct, and the messageCreate handler
-// still never fires. This logs the event names Discord actually sends, so
-// the next run answers "is MESSAGE_CREATE arriving at all?" instead of
-// leaving it to be inferred. If MESSAGE_CREATE appears here but the
-// handler stays silent, the fault is in discord.js's dispatch or the
-// intents it negotiated. If it never appears, Discord is not sending it
-// and the cause is account-side, not code-side.
-client.on('raw', (packet) => {
-  if (packet?.t && packet.t !== 'PRESENCE_UPDATE' && packet.t !== 'TYPING_START') {
-    console.log(`[raw] ${packet.t}`);
+// Raw gateway tap, on the WebSocket manager.
+//
+// The previous attempt used client.on('raw'), which does not exist in
+// discord.js v14 -- it was removed after v12, so the listener registered
+// silently and never fired. That is why the last deploy produced no [raw]
+// lines even at startup, when READY and GUILD_CREATE should always appear.
+//
+// client.ws.on('dispatch') is the v14 equivalent and receives every gateway
+// event. This answers the actual question: is MESSAGE_CREATE arriving at
+// all? If it appears but messageCreate stays silent, the fault is in
+// discord.js dispatch or the negotiated intents. If it never appears,
+// Discord is not sending it.
+client.ws.on('dispatch', ({ t }) => {
+  if (t && t !== 'PRESENCE_UPDATE' && t !== 'TYPING_START') {
+    console.log(`[gateway] ${t}`);
   }
 });
 
