@@ -1,0 +1,15 @@
+{
+  "name": "caliper-qa-bot",
+  "version": "1.0.0",
+  "description": "Discord Q&A bot for the Caliper NRL model's #questions channel",
+  "type": "module",
+  "main": "caliper-qa-bot.mjs",
+  "scripts": {
+    "start": "node caliper-qa-bot.mjs"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "@anthropic-ai/sdk": "^0.32.1",
+    "dotenv": "^16.4.5"
+  }
+}
