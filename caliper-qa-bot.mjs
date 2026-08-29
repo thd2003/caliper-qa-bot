@@ -208,6 +208,23 @@ const client = new Client({
 });
 
 client.on('error', (err) => console.error('Discord client error:', err.message));
+client.on('warn', (w) => console.warn('Discord warning:', w));
+client.on('shardDisconnect', (e, id) => console.warn(`Shard ${id} disconnected: ${e?.code}`));
+client.on('shardError', (err) => console.error('Shard error:', err.message));
+
+// Raw gateway tap. Every check so far -- intents, permissions, channel id,
+// listener order -- has come back correct, and the messageCreate handler
+// still never fires. This logs the event names Discord actually sends, so
+// the next run answers "is MESSAGE_CREATE arriving at all?" instead of
+// leaving it to be inferred. If MESSAGE_CREATE appears here but the
+// handler stays silent, the fault is in discord.js's dispatch or the
+// intents it negotiated. If it never appears, Discord is not sending it
+// and the cause is account-side, not code-side.
+client.on('raw', (packet) => {
+  if (packet?.t && packet.t !== 'PRESENCE_UPDATE' && packet.t !== 'TYPING_START') {
+    console.log(`[raw] ${packet.t}`);
+  }
+});
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}, watching #questions only.`);
