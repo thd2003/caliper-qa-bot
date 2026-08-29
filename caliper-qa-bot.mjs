@@ -212,23 +212,29 @@ client.on('warn', (w) => console.warn('Discord warning:', w));
 client.on('shardDisconnect', (e, id) => console.warn(`Shard ${id} disconnected: ${e?.code}`));
 client.on('shardError', (err) => console.error('Shard error:', err.message));
 
-// Raw gateway tap, on the WebSocket manager.
+// Gateway tap by wrapping handlePacket.
 //
-// The previous attempt used client.on('raw'), which does not exist in
-// discord.js v14 -- it was removed after v12, so the listener registered
-// silently and never fired. That is why the last deploy produced no [raw]
-// lines even at startup, when READY and GUILD_CREATE should always appear.
+// Two previous attempts failed silently, which is worth recording so the
+// same ground is not covered a third time:
 //
-// client.ws.on('dispatch') is the v14 equivalent and receives every gateway
-// event. This answers the actual question: is MESSAGE_CREATE arriving at
-// all? If it appears but messageCreate stays silent, the fault is in
-// discord.js dispatch or the negotiated intents. If it never appears,
-// Discord is not sending it.
-client.ws.on('dispatch', ({ t }) => {
-  if (t && t !== 'PRESENCE_UPDATE' && t !== 'TYPING_START') {
-    console.log(`[gateway] ${t}`);
+//   client.on('raw')          -- does not exist in v14, removed after v12
+//   client.ws.on('dispatch')  -- WebSocketManager is an EventEmitter and
+//                                accepts the listener, but never emits
+//                                'dispatch', so it also never fired
+//
+// Both attached without error and produced nothing, including no READY,
+// which is what made them misleading rather than merely useless.
+//
+// handlePacket is the method every gateway packet passes through, so
+// wrapping it cannot miss. Verified by calling it directly and confirming
+// the wrapper intercepts the packet before the original runs.
+const _origHandlePacket = client.ws.handlePacket.bind(client.ws);
+client.ws.handlePacket = (packet, shard) => {
+  if (packet?.t && packet.t !== 'PRESENCE_UPDATE' && packet.t !== 'TYPING_START') {
+    console.log(`[gateway] ${packet.t}`);
   }
-});
+  return _origHandlePacket(packet, shard);
+};
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}, watching #questions only.`);
