@@ -285,22 +285,53 @@ client.on('interactionCreate', async (interaction) => {
 // what the bot knows -- it still answers only from knowledge-base.mjs, still
 // gets pre-screened, still gets its output scanned for protected values.
 client.on('messageCreate', async (message) => {
+  // Every guard logs when it stops a message. Without this a silent bot is
+  // indistinguishable from a broken one -- the failure mode is identical, so
+  // the only way to tell them apart is to say which gate closed and why.
   if (message.author.bot) return;                    // never react to bots, incl. itself
-  if (!message.guildId) return;                      // no DMs
-  if (message.channelId !== process.env.QUESTIONS_CHANNEL_ID) return;
+  if (!message.guildId) {
+    console.log('[skip] DM, not a guild message');
+    return;
+  }
+  if (message.channelId !== process.env.QUESTIONS_CHANNEL_ID) {
+    console.log(`[skip] wrong channel: got ${message.channelId}, `
+      + `expected ${process.env.QUESTIONS_CHANNEL_ID}`);
+    return;
+  }
 
   const text = (message.content || '').trim();
-  if (text.length < 8) return;                       // "ok", "nice", emoji-only
-  if (text.length > 1500) return;                    // pasted walls of text
-  if (text.startsWith('/')) return;                  // slash command, handled elsewhere
+
+  // An EMPTY body here almost always means the Message Content intent is not
+  // actually delivering content, even though the gateway connected. Discord
+  // sends the message object either way, so the bot looks alive and simply
+  // never answers anything.
+  if (!text) {
+    console.log('[skip] empty content -- Message Content intent may be off '
+      + 'in the Developer Portal even though login succeeded');
+    return;
+  }
+  if (text.length < 8) {
+    console.log(`[skip] too short (${text.length} chars): "${text}"`);
+    return;
+  }
+  if (text.length > 1500) {
+    console.log(`[skip] too long (${text.length} chars)`);
+    return;
+  }
+  if (text.startsWith('/')) {
+    console.log('[skip] starts with / -- treated as a slash command');
+    return;
+  }
 
   const userId = message.author.id;
+  console.log(`[recv] "${text}"`);
 
   try {
     // Screened BEFORE the rate limit is consumed. Most channel chatter is not
     // a question, and charging someone their hourly allowance for saying
     // "good round" would be wrong.
     const verdict = await screenMessage(text);
+    console.log(`[screen] ${verdict}`);
     if (verdict === 'IGNORE') return;                // silence, not a reply
 
     if (verdict === 'EXTRACTION') {
