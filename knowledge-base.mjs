@@ -26,9 +26,9 @@ result to live prices across several bookmakers. Where the difference
 is large enough, it suggests a bet and sizes it using the Kelly
 criterion.
 
-On top of that sits a hand-built layer: personnel rules for who is
-missing, player ratings, and a blended second opinion from an
-independent matchup model.
+On top of that sits an independent second opinion: a separate matchup
+model that can push back on a selection when it disagrees with the
+primary engine.
 
 # What is unusual about it
 
@@ -41,8 +41,8 @@ price isn't an edge -- an edge requires a specific price being wrong,
 not just being right about the result.
 
 Every constant it uses is either measured from data or labelled as a
-guess. When a rule contradicts the history, the model shrinks it
-toward zero rather than keeping it at full strength.
+guess. When an assumption contradicts the history, the model shrinks
+it toward zero rather than keeping it at full strength.
 
 # How the model works, in plain terms
 
@@ -56,20 +56,14 @@ toward zero rather than keeping it at full strength.
    market comes from the same simulated draws, so correlations
    between (for example) a line bet and a total-points bet are
    actually measured rather than assumed independent.
-4. Personnel: rules of the form "this side performs differently
-   without this specific player", each checked against several
-   seasons of history and shrunk if the history doesn't support the
-   claim at full strength. Some rules survive that check unchanged;
-   many get pulled most of the way toward zero.
-5. Ratings and the third-party model: player ratings adjust who
-   scores within a side. An independent matchup model is blended in
-   as a second opinion, and can push back on a selection when it
-   disagrees.
-6. Pricing: head-to-head prices are de-vigged (the bookmaker's margin
+4. Second opinion: an independent matchup model is blended in, and
+   can push back on a selection when it disagrees with the primary
+   engine.
+5. Pricing: head-to-head prices are de-vigged (the bookmaker's margin
    is removed mathematically) so the comparison is against a fair
    probability, not a price that's inherently skewed against the
    bettor.
-7. Staking: sized using the Kelly criterion, at a fraction of what
+6. Staking: sized using the Kelly criterion, at a fraction of what
    full Kelly would suggest, and shrunk further when the model's own
    estimate is more uncertain.
 
@@ -95,22 +89,6 @@ At these stakes and this many bets, a single round is mostly noise.
 The record is published every week regardless of which way it goes,
 specifically so nobody has to take that on faith.
 
-# On the personnel rules generally
-
-There are dozens of them, each targeting a specific player's presence
-or absence for a specific team. They aren't applied at face value --
-each one is checked against multiple seasons of history, and if the
-data doesn't support the rule as strongly as it was originally
-written, the rule gets weakened rather than removed outright or kept
-at full strength. Some rules have been found to disagree with history
-entirely and were reduced close to zero as a result. The model doesn't
-hide when that happens -- it's part of the published process.
-
-The exact list of rules, which specific players they cover, and their
-exact point values are not shared. That's the part of the model that
-would let someone else copy it directly rather than understand how it
-works, and it's the one place transparency stops.
-
 # On the Kelly staking approach
 
 Kelly criterion sizing chooses a bet size that grows a bankroll
@@ -123,10 +101,9 @@ further specifically for bets it's less certain about, and caps how
 much can go on a single very long-priced bet, since a badly-estimated
 longshot can do outsized damage to a bankroll even at a modest stake.
 
-The exact fraction used, and the exact caps, aren't shared for the
-same reason the rule values aren't -- they're tuning choices that
-would let someone replicate the sizing exactly rather than understand
-the approach.
+The exact fraction used, and the exact caps, aren't shared -- they're
+tuning choices that would let someone replicate the sizing exactly
+rather than understand the approach.
 
 # On multis
 
