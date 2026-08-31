@@ -226,6 +226,26 @@ async function answerQuestion(question) {
   return resp.content?.[0]?.text || '';
 }
 
+// Discord caps a single message at ~2000 characters. A hard slice(0, 1900)
+// chops wherever that lands -- mid-word, mid-sentence, wherever -- which
+// reads as broken rather than as a length limit. This trims back to the
+// last sentence ending inside the limit instead, so a long answer ends on
+// a genuine stopping point even if that means being a little shorter than
+// the cap allows.
+function trimToDiscordLimit(text, limit = 1900) {
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const lastBreak = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('.\n'),
+                              cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  // Only use the sentence break if it doesn't throw away most of the
+  // answer -- an unlucky early period should not truncate a long reply
+  // down to one line.
+  if (lastBreak > limit * 0.5) {
+    return cut.slice(0, lastBreak + 1);
+  }
+  return cut;
+}
+
 const SAFE_FALLBACK =
   "That's not something I can get into here -- happy to explain the general approach instead, or ask a mod directly.";
 
@@ -354,7 +374,7 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    await interaction.editReply(answer.slice(0, 1900)); // Discord's message limit
+    await interaction.editReply(trimToDiscordLimit(answer));
   } catch (err) {
     console.error('Error handling /ask:', err.message);
     await interaction.editReply("Something went wrong answering that -- try again in a moment.");
@@ -445,7 +465,7 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    await message.reply(answer.slice(0, 1900));
+    await message.reply(trimToDiscordLimit(answer));
   } catch (err) {
     console.error('Error handling message:', err.message);
     // Deliberately silent on error. An unprompted "something went wrong" in a
