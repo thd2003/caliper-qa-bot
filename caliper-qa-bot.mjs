@@ -63,28 +63,56 @@ const SYSTEM_PROMPT = buildSystemPrompt();
 // LLM call costs real money per use, so this is not optional. Simple
 // in-memory cooldown -- fine for a single-process bot; move to a shared
 // store (Redis) if this ever runs on more than one instance.
-const COOLDOWN_MS = 60_000;      // one question per user per minute
-const DAILY_LIMIT = 20;          // per user, resets naturally via the map below
-const lastUse = new Map();       // userId -> timestamp
-const dailyCount = new Map();    // userId -> { count, day }
+// A token bucket, not a flat cooldown.
+//
+// The first version enforced one question per minute, which refused a
+// perfectly reasonable follow-up asked ten seconds after the first answer.
+// Real conversation comes in bursts -- someone reads a reply and immediately
+// asks the obvious next thing -- and a bot that says "wait 43s" to that is
+// worse than one that costs a few extra cents.
+//
+// So: a burst of BURST_SIZE questions is allowed back to back, and the
+// bucket refills one token every REFILL_MS. Sustained spam still gets
+// throttled, because the bucket empties faster than it fills, but normal
+// back-and-forth never hits it.
+const BURST_SIZE = 4;             // questions allowed in quick succession
+const REFILL_MS = 45_000;         // one token back every 45 seconds
+const DAILY_LIMIT = 40;           // per user per day, a backstop on cost
+const buckets = new Map();        // userId -> { tokens, lastRefill }
+const dailyCount = new Map();     // userId -> { count, day }
 
 function checkRateLimit(userId) {
   const now = Date.now();
-  const last = lastUse.get(userId) || 0;
-  if (now - last < COOLDOWN_MS) {
-    return { allowed: false, reason: `Please wait ${Math.ceil((COOLDOWN_MS - (now - last)) / 1000)}s between questions.` };
+  const b = buckets.get(userId) || { tokens: BURST_SIZE, lastRefill: now };
+
+  // Refill based on elapsed time, capped at the burst size.
+  const refills = Math.floor((now - b.lastRefill) / REFILL_MS);
+  if (refills > 0) {
+    b.tokens = Math.min(BURST_SIZE, b.tokens + refills);
+    b.lastRefill = now;
   }
+
+  if (b.tokens <= 0) {
+    const wait = Math.ceil((REFILL_MS - (now - b.lastRefill)) / 1000);
+    buckets.set(userId, b);
+    return { allowed: false,
+             reason: `Give me ${wait}s to catch up -- I'm answering a lot at once.` };
+  }
+
   const today = new Date().toDateString();
   const entry = dailyCount.get(userId);
   if (!entry || entry.day !== today) {
     dailyCount.set(userId, { count: 1, day: today });
   } else {
     if (entry.count >= DAILY_LIMIT) {
-      return { allowed: false, reason: "You've reached today's question limit. Try again tomorrow." };
+      return { allowed: false,
+               reason: "That's a lot of questions for one day -- back tomorrow." };
     }
     entry.count += 1;
   }
-  lastUse.set(userId, now);
+
+  b.tokens -= 1;
+  buckets.set(userId, b);
   return { allowed: true };
 }
 
@@ -149,6 +177,12 @@ async function screenMessage(text) {
       '  "is this profitable"',
       '  "what does position only mean on a try scorer"',
       '  "how big are the bets"',
+      '  "would you recommend it?"',
+      '  "should I follow this?"',
+      '  "is it worth betting on"',
+      'Questions asking whether someone should bet DO belong here -- the',
+      'assistant handles them by declining to advise and explaining why,',
+      'which it can only do if it sees them.',
       'Short, casual or lowercase phrasing still counts. A question mark is',
       'not required.',
       '',
